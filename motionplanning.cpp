@@ -617,7 +617,9 @@ bool handleSuccess(std::string& current_cube_id, const geometry_msgs::Pose& init
 
     // Clear all collision objects from the planning scene
     ROS_INFO("Clearing planning scene...");
+    
     planning_scene_interface.clear();
+
     ROS_INFO("Planning scene cleared.");
 
     
@@ -688,6 +690,9 @@ bool handlePickAction(const Action& action, std::vector<int>& dynamic_state, Goa
     dynamic_state[current_pick_position]--;  // Remove the cube from the position
     gripper_has_cube = true;
     dynamic_state[9] = 1;  // Update gripper state
+    planning_scene_interface.clear();
+    ros::Duration(0.1).sleep();
+    addCollisionObjects(dynamic_state);
 
     ROS_INFO("PICK ACTION SUCCEEDED.");
     return true;
@@ -779,6 +784,9 @@ bool handlePlaceAction(const Action& action, std::vector<int>& dynamic_state, Go
     current_pick_position = -1;
     gripper_has_cube = false;
     dynamic_state[9] = 0;
+    planning_scene_interface.clear();
+    ros::Duration(0.1).sleep();
+    addCollisionObjects(dynamic_state);
 
     ROS_INFO("PLACE ACTION SUCCEEDED.");
     return true;
@@ -918,6 +926,9 @@ bool handleStackAction(const Action& action, std::vector<int>& dynamic_state, Go
     current_cube_id.clear();  // Clear the current cube ID
     gripper_has_cube = false; // The gripper is no longer holding the cube
     current_pick_position = -1;
+    planning_scene_interface.clear();
+    ros::Duration(0.1).sleep();
+    addCollisionObjects(dynamic_state);
 
     ROS_INFO("STACK ACTION SUCCEEDED.");
     return true;
@@ -1010,6 +1021,9 @@ bool handleUnstackAction(const Action& action, std::vector<int>& dynamic_state, 
             allowSpecificCubeCollision(current_cube_id, cube.first, false);
         }
     }
+    planning_scene_interface.clear();
+    ros::Duration(0.1).sleep();
+    addCollisionObjects(dynamic_state);
 
     ROS_INFO("UNSTACK ACTION SUCCEEDED. Gripper is now holding cube %s.", current_cube_id.c_str());
     return true;
@@ -2117,117 +2131,117 @@ int main(int argc, char** argv)
     PandaMotionPlanner planner;
 
     // Set the number of unique simulations to run
-    int num_simulations = 30; // Desired number of unique simulations
-    int max_cubes = 2;
-    int random_action = 0;
-    int max_height = 2;
+    // int num_simulations = 30; // Desired number of unique simulations
+    // int max_cubes = 2;
+    // int random_action = 0;
+    // int max_height = 2;
 
-    // Start the timer
-    auto start_time = std::chrono::high_resolution_clock::now();
+    // // Start the timer
+    // auto start_time = std::chrono::high_resolution_clock::now();
 
-    // Run the simulations and get the results
-    auto [states, actions, results, resulting_states] = planner.runSimulations2x2(num_simulations, max_cubes, random_action, max_height);
+    // // Run the simulations and get the results
+    // auto [states, actions, results, resulting_states] = planner.runSimulations2x2(num_simulations, max_cubes, random_action, max_height);
 
-    // Initialize vectors for precondition and effect results
-    std::vector<bool> precondition_results;
-    std::vector<bool> effect_results;
+    // // Initialize vectors for precondition and effect results
+    // std::vector<bool> precondition_results;
+    // std::vector<bool> effect_results;
 
-    // Run the task planning and get the precondition and effect results
-    planner.runTaskPlanning(states, actions, results, resulting_states, precondition_results, effect_results);
+    // // Run the task planning and get the precondition and effect results
+    // planner.runTaskPlanning(states, actions, results, resulting_states, precondition_results, effect_results);
 
-    // Collect discrepancies and compute metrics
-    std::vector<std::tuple<PandaMotionPlanner::State, PandaMotionPlanner::Action, std::string>> discrepancies_preconditions;
-    std::vector<std::tuple<PandaMotionPlanner::State, PandaMotionPlanner::Action, PandaMotionPlanner::State, std::string>> discrepancies_effects;
+    // // Collect discrepancies and compute metrics
+    // std::vector<std::tuple<PandaMotionPlanner::State, PandaMotionPlanner::Action, std::string>> discrepancies_preconditions;
+    // std::vector<std::tuple<PandaMotionPlanner::State, PandaMotionPlanner::Action, PandaMotionPlanner::State, std::string>> discrepancies_effects;
 
-    // Initialize counters
-    int total_plans = results.size();
-    int motion_successes = 0;
-    int motion_failures = 0;
-    int precondition_successes = 0;
-    int precondition_failures = 0;
-    int effect_successes = 0;
-    int effect_failures = 0;
-    int black_list_type_1 = 0; // Both motion and precondition failed
-    int white_list_type_1 = 0; // Both motion and precondition succeeded
-    int black_list_type_2 = 0; // Precondition succeeded, motion failed
-    int white_list_type_2 = 0; // Precondition failed, motion succeeded
+    // // Initialize counters
+    // int total_plans = results.size();
+    // int motion_successes = 0;
+    // int motion_failures = 0;
+    // int precondition_successes = 0;
+    // int precondition_failures = 0;
+    // int effect_successes = 0;
+    // int effect_failures = 0;
+    // int black_list_type_1 = 0; // Both motion and precondition failed
+    // int white_list_type_1 = 0; // Both motion and precondition succeeded
+    // int black_list_type_2 = 0; // Precondition succeeded, motion failed
+    // int white_list_type_2 = 0; // Precondition failed, motion succeeded
 
-    for (size_t i = 0; i < total_plans; ++i) {
-    bool motion_result = results[i];
-    bool precondition_result = precondition_results[i];
-    bool effect_result = effect_results[i];
+    // for (size_t i = 0; i < total_plans; ++i) {
+    // bool motion_result = results[i];
+    // bool precondition_result = precondition_results[i];
+    // bool effect_result = effect_results[i];
 
-    // Count motion planning successes and failures
-    if (motion_result) {
-        motion_successes++;
-    } else {
-        motion_failures++;
-    }
+    // // Count motion planning successes and failures
+    // if (motion_result) {
+    //     motion_successes++;
+    // } else {
+    //     motion_failures++;
+    // }
 
-    // Count precondition successes and failures
-    if (precondition_result) {
-        precondition_successes++;
-    } else {
-        precondition_failures++;
-    }
+    // // Count precondition successes and failures
+    // if (precondition_result) {
+    //     precondition_successes++;
+    // } else {
+    //     precondition_failures++;
+    // }
 
-    // Classify into categories based on motion and precondition results
-    if (!motion_result && !precondition_result) {
-        black_list_type_1++;
-    } else if (motion_result && precondition_result) {
-        white_list_type_1++;
-    } else if (!motion_result && precondition_result) {
-        black_list_type_2++;
-    } else if (motion_result && !precondition_result) {
-        white_list_type_2++;
-    }
+    // // Classify into categories based on motion and precondition results
+    // if (!motion_result && !precondition_result) {
+    //     black_list_type_1++;
+    // } else if (motion_result && precondition_result) {
+    //     white_list_type_1++;
+    // } else if (!motion_result && precondition_result) {
+    //     black_list_type_2++;
+    // } else if (motion_result && !precondition_result) {
+    //     white_list_type_2++;
+    // }
 
-    // Collect discrepancies for preconditions
-    if (motion_result != precondition_result) {
-        std::string discrepancy_info;
-        if (motion_result && !precondition_result) {
-            discrepancy_info = "Motion Planning SUCCEEDED, Precondition Check FAILED";
-            discrepancies_preconditions.push_back(std::make_tuple(states[i], actions[i], discrepancy_info));
-        } else if (!motion_result && precondition_result) {
-            discrepancy_info = "Motion Planning FAILED, Precondition Check SUCCEEDED";
-            discrepancies_preconditions.push_back(std::make_tuple(states[i], actions[i], discrepancy_info));
-        }
-    }
+    // // Collect discrepancies for preconditions
+    // if (motion_result != precondition_result) {
+    //     std::string discrepancy_info;
+    //     if (motion_result && !precondition_result) {
+    //         discrepancy_info = "Motion Planning SUCCEEDED, Precondition Check FAILED";
+    //         discrepancies_preconditions.push_back(std::make_tuple(states[i], actions[i], discrepancy_info));
+    //     } else if (!motion_result && precondition_result) {
+    //         discrepancy_info = "Motion Planning FAILED, Precondition Check SUCCEEDED";
+    //         discrepancies_preconditions.push_back(std::make_tuple(states[i], actions[i], discrepancy_info));
+    //     }
+    // }
 
-    // For effect results, only consider cases where motion planning and precondition succeeded
-    if (motion_result && precondition_result) {
-        if (effect_result) {
-            effect_successes++;
-        } else {
-            effect_failures++;
-            // Collect discrepancies due to effect mismatches
-            discrepancies_effects.push_back(std::make_tuple(states[i], actions[i], resulting_states[i], "Effects not correctly reflected in resulting state"));
-        }
-    }
-    }
+    // // For effect results, only consider cases where motion planning and precondition succeeded
+    // if (motion_result && precondition_result) {
+    //     if (effect_result) {
+    //         effect_successes++;
+    //     } else {
+    //         effect_failures++;
+    //         // Collect discrepancies due to effect mismatches
+    //         discrepancies_effects.push_back(std::make_tuple(states[i], actions[i], resulting_states[i], "Effects not correctly reflected in resulting state"));
+    //     }
+    // }
+    // }
 
-    // Print the results
-    planner.printResults(states, actions, results, precondition_results, effect_results, resulting_states);
-    planner.printSimpleResults(states, actions, results, precondition_results, effect_results, resulting_states);
+    // // Print the results
+    // planner.printResults(states, actions, results, precondition_results, effect_results, resulting_states);
+    // planner.printSimpleResults(states, actions, results, precondition_results, effect_results, resulting_states);
 
-    // Print discrepancies
-    planner.printDiscrepancies(discrepancies_preconditions, discrepancies_effects);
-
-
-    // Print the metrics
-    planner.printMetrics(total_plans, motion_successes, motion_failures,
-                 precondition_successes, precondition_failures,
-                 effect_successes, effect_failures,
-                 black_list_type_1, white_list_type_1,
-                 black_list_type_2, white_list_type_2);
-
-    // End the timer after simulations are complete
-    auto end_time = std::chrono::high_resolution_clock::now();
+    // // Print discrepancies
+    // planner.printDiscrepancies(discrepancies_preconditions, discrepancies_effects);
 
 
-    // Calculate the elapsed time
-    std::chrono::duration<double> elapsed_time = end_time - start_time;
-    ROS_INFO("Total time for %d simulations: %.2f seconds", num_simulations, elapsed_time.count());
+    // // Print the metrics
+    // planner.printMetrics(total_plans, motion_successes, motion_failures,
+    //              precondition_successes, precondition_failures,
+    //              effect_successes, effect_failures,
+    //              black_list_type_1, white_list_type_1,
+    //              black_list_type_2, white_list_type_2);
+
+    // // End the timer after simulations are complete
+    // auto end_time = std::chrono::high_resolution_clock::now();
+
+
+    // // Calculate the elapsed time
+    // std::chrono::duration<double> elapsed_time = end_time - start_time;
+    // ROS_INFO("Total time for %d simulations: %.2f seconds", num_simulations, elapsed_time.count());
 
 
 
@@ -2239,35 +2253,40 @@ int main(int argc, char** argv)
 
 
     
-    // // Uncomment below for manual testing of a specific state and action sequence
+    // Uncomment below for manual testing of a specific state and action sequence
 
-    // // Manually define a state
-    // // State layout: 9 positions in a 3x3 grid and the last element indicates if the gripper is holding a cube (1 = holding, 0 = empty)
-    // PandaMotionPlanner::State manual_state = {2, 1, 0, 0, 2, 0, 0, 0, 0, 1};  // This means: cube at position 0 and 2, gripper is empty
+    // Manually define a state
+    // State layout: 9 positions in a 3x3 grid and the last element indicates if the gripper is holding a cube (1 = holding, 0 = empty)
+    PandaMotionPlanner::State manual_state = {2, 1, 0, 0, 2, 0, 0, 0, 0, 1};  // This means: cube at position 0 and 2, gripper is empty
 
-    // // Manually define an action sequence
-    // // Action Types: PICK (from position), PLACE (to position), STACK (cube on cube), UNSTACK (cube from cube to new position)
-    // std::vector<PandaMotionPlanner::Action> manual_actions = {
-    //     PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 2),         // Pick cube from position 0
-    //     PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 3),         // Pick cube from position 0
-    //     PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 3, 0),         // Pick cube from position 0
-    //     PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 5, 4),         // Pick cube from position 0
-    //     // PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 0),         // Pick cube from position 0
-    //     // PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 0, 3),  // Place cube in position 4
-    //     // PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 0, 3),         // Pick cube from position 0
-    //     // PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 8),         // Pick cube from position 0
-    //     // PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 2),         // Pick cube from position 0
-    //     // PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 2, 3)  // Place cube in position 4
-    // };
+    // Manually define an action sequence
+    // Action Types: PICK (from position), PLACE (to position), STACK (cube on cube), UNSTACK (cube from cube to new position)
+    std::vector<PandaMotionPlanner::Action> manual_actions = {
+        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 2),         // Pick cube from position 0
+        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 3),         // Pick cube from position 0
+        PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 3, 2),         // Pick cube from position 0
+        PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 5, 4),         // Pick cube from position 0
+        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 5, 6),         // Pick cube from position 0
+        PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 3, 2),         // Pick cube from position 0
+        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 3, 7),         // Pick cube from position 0
+        PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 2, 1),         // Pick cube from position 0
+        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 2, 8),         // Pick cube from position 0
+        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 0),         // Pick cube from position 0
+        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 0, 3),  // Place cube in position 4
+        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 0, 3),         // Pick cube from position 0
+        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 8),         // Pick cube from position 0
+        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 2),         // Pick cube from position 0
+        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 2, 3)  // Place cube in position 4
+    };
 
-    // // Run the manual state and action sequence
-    // bool result = planner.run(manual_actions, manual_state);
+    // Run the manual state and action sequence
+    bool result = planner.run(manual_actions, manual_state);
 
-    // if (result) {
-    //     ROS_INFO("Manual action sequence executed successfully.");
-    // } else {
-    //     ROS_ERROR("Manual action sequence failed.");
-    // }
+    if (result) {
+        ROS_INFO("Manual action sequence executed successfully.");
+    } else {
+        ROS_ERROR("Manual action sequence failed.");
+    }
 
 
     ros::shutdown();
