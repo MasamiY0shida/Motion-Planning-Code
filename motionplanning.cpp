@@ -267,7 +267,7 @@ geometry_msgs::Pose calculateIntermediatePosition(const geometry_msgs::Pose& tar
 }
 
 
-bool moveGripper(bool open)
+bool moveGripper(bool open, bool execute = true)
 {
     // Set joint values for opening or closing the gripper
     std::vector<double> gripper_joint_values;
@@ -294,11 +294,20 @@ bool moveGripper(bool open)
     if (success) {
         ROS_INFO("Gripper plan succeeded. Executing...");
 
-        // Execute the gripper motion without the prompt to save time
-        // gripper_move_group.execute(gripper_plan);
+        if (execute) {
+            // Execute the gripper motion
+            gripper_move_group.execute(gripper_plan);
 
+        } else {
+            // Skip execution
+            ROS_INFO("Skipped execution");
+
+            // Update the robot's internal state with the final joint positions from the plan
+            updateInternalGripperState(gripper_plan);
+
+        }
         // Optionally, if you want a visual prompt, uncomment the following line
-        visual_tools.prompt("Press 'next' to " + std::string(open ? "open" : "close") + " the gripper");
+        // visual_tools.prompt("Press 'next' to " + std::string(open ? "open" : "close") + " the gripper");
 
         ROS_INFO("Gripper %s executed successfully.", open ? "open" : "close");
     } else {
@@ -308,30 +317,31 @@ bool moveGripper(bool open)
     return success;
 }
 
-bool moveToPosition(const geometry_msgs::Pose& target_pose, const std::string& action_description) {
+bool moveToPosition(const geometry_msgs::Pose& target_pose, const std::string& action_description, bool execute = true) {
     std::string end_effector_link = arm_move_group.getEndEffectorLink();
     ROS_INFO("End effector link: %s", end_effector_link.c_str());
 
     // Set the target pose
     arm_move_group.setPoseTarget(target_pose);
 
-    // Increase planning time and attempts for debugging
-    arm_move_group.setPlanningTime(1.5); // Increased planning time
-    arm_move_group.setNumPlanningAttempts(3); // Increased number of attempts
+    // Set planning parameters
+    arm_move_group.setPlanningTime(1.5);
+    arm_move_group.setNumPlanningAttempts(3);
 
-    // Set a reasonable planner
+    // Set the planner ID
     arm_move_group.setPlannerId("RRTConnectkConfigDefault");
 
-    // Moderate velocity and acceleration scaling factors
-    arm_move_group.setMaxVelocityScalingFactor(0.8); // Moderate velocity
-    arm_move_group.setMaxAccelerationScalingFactor(0.8); // Moderate acceleration
+    // Set velocity and acceleration scaling factors
+    arm_move_group.setMaxVelocityScalingFactor(0.8);
+    arm_move_group.setMaxAccelerationScalingFactor(0.8);
 
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    bool success = (arm_move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+    bool planning_success = (arm_move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
 
-    if (success) {
-        ROS_INFO("Motion plan succeeded. Executing...");
-        // Optionally, visualize the plan
+    if (planning_success) {
+        ROS_INFO("Motion plan succeeded.");
+
+        // Visualize the plan
         visual_tools.deleteAllMarkers();
         visual_tools.publishTrajectoryLine(
             my_plan.trajectory_,
@@ -339,23 +349,93 @@ bool moveToPosition(const geometry_msgs::Pose& target_pose, const std::string& a
         );
         visual_tools.trigger();
 
-        // Execute the plan
-        // arm_move_group.execute(my_plan);
+        if (execute) {
+            ROS_INFO("Executing the plan...");
+            moveit::core::MoveItErrorCode execution_result = arm_move_group.execute(my_plan);
+            if (execution_result != moveit::planning_interface::MoveItErrorCode::SUCCESS) {
+                ROS_ERROR("Execution failed.");
+                return false;
+            }
+        } else {
+            ROS_INFO("Execution skipped as per the input parameter.");
+
+            // Update the robot's internal state with the final joint positions from the plan
+            updateInternalRobotState(my_plan);
+        }
     } else {
         ROS_ERROR("Failed to plan movement to target pose");
+        return false;
     }
-    return success;
+    return true;
+}
+
+void updateInternalGripperState(const moveit::planning_interface::MoveGroupInterface::Plan& plan) {
+    // Get the last point in the trajectory
+    if (plan.trajectory_.joint_trajectory.points.empty()) {
+        ROS_WARN("Gripper planned trajectory is empty. Cannot update internal gripper state.");
+        return;
+    }
+
+    const trajectory_msgs::JointTrajectoryPoint& last_point = plan.trajectory_.joint_trajectory.points.back();
+
+    // Get the current state of the robot
+    moveit::core::RobotStatePtr current_state = gripper_move_group.getCurrentState();
+
+    // Update the joint positions
+    const std::vector<std::string>& joint_names = plan.trajectory_.joint_trajectory.joint_names;
+    const std::vector<double>& joint_positions = last_point.positions;
+
+    if (joint_names.size() != joint_positions.size()) {
+        ROS_ERROR("Mismatch between gripper joint names and joint positions size.");
+        return;
+    }
+
+    // Set the joint positions in the current state
+    current_state->setVariablePositions(joint_names, joint_positions);
+
+    // Update the MoveGroup's internal state
+    gripper_move_group.setStartState(*current_state);
+}
+
+
+void updateInternalRobotState(const moveit::planning_interface::MoveGroupInterface::Plan& plan) {
+    // Get the last point in the trajectory
+    if (plan.trajectory_.joint_trajectory.points.empty()) {
+        ROS_WARN("Planned trajectory is empty. Cannot update internal robot state.");
+        return;
+    }
+
+    const trajectory_msgs::JointTrajectoryPoint& last_point = plan.trajectory_.joint_trajectory.points.back();
+
+    // Get the current state of the robot
+    moveit::core::RobotStatePtr current_state = arm_move_group.getCurrentState();
+
+    // Update the joint positions
+    const std::vector<std::string>& joint_names = plan.trajectory_.joint_trajectory.joint_names;
+    const std::vector<double>& joint_positions = last_point.positions;
+
+    if (joint_names.size() != joint_positions.size()) {
+        ROS_ERROR("Mismatch between joint names and joint positions size.");
+        return;
+    }
+
+    // Set the joint positions in the current state
+    current_state->setVariablePositions(joint_names, joint_positions);
+
+    // Update the MoveGroup's internal state
+    arm_move_group.setStartState(*current_state);
 }
 
 
 
-bool pickCube(const std::string& cube_id, const geometry_msgs::Pose& pick_pose)
+
+bool pickCube(const std::string& cube_id, const geometry_msgs::Pose& pick_pose, bool execute)
 {
     // Calculate g1 (15 cm above pick_pose)
     geometry_msgs::Pose g1 = calculateIntermediatePosition(pick_pose);
 
     // Move to g1
-    if (!moveToPosition(g1, "move to position above " + cube_id)) {
+    if (!moveToPosition(g1, "move to position above " + cube_id, execute)) {
         ROS_ERROR("FAILED TO MOVE TO POSITION ABOVE %s FOR PICKING.", cube_id.c_str());
         return false;
     }
@@ -363,20 +443,20 @@ bool pickCube(const std::string& cube_id, const geometry_msgs::Pose& pick_pose)
     // Lower to pick position
     geometry_msgs::Pose lower_pose = pick_pose;
     lower_pose.position.z = pick_pose.position.z + 0.1;  // Slightly above the cube to account for gripper size
-    if (!moveToPosition(lower_pose, "lower to pick " + cube_id)) {
+    if (!moveToPosition(lower_pose, "lower to pick " + cube_id, execute)) {
         ROS_ERROR("FAILED TO LOWER TO PICK %s.", cube_id.c_str());
         return false;
     }
 
     // Gripper actions
-    if (!moveGripper(true)) {  // Open gripper
+    if (!moveGripper(true, execute)) {  // Open gripper
         ROS_ERROR("FAILED TO OPEN GRIPPER FOR PICKING %s.", cube_id.c_str());
         return false;
     }
 
-    visual_tools.prompt("Press 'next' to close gripper and pick " + cube_id);
+    // visual_tools.prompt("Press 'next' to close gripper and pick " + cube_id);
 
-    if (!moveGripper(false)) {  // Close gripper
+    if (!moveGripper(false, execute)) {  // Close gripper
         ROS_ERROR("FAILED TO CLOSE GRIPPER FOR PICKING %s.", cube_id.c_str());
         return false;
     }
@@ -384,7 +464,7 @@ bool pickCube(const std::string& cube_id, const geometry_msgs::Pose& pick_pose)
     attachObject(cube_id, "panda_hand");
 
     // Move back to g1
-    if (!moveToPosition(g1, "lift " + cube_id)) {
+    if (!moveToPosition(g1, "lift " + cube_id, execute)) {
         ROS_ERROR("FAILED TO LIFT %s AFTER PICKING.", cube_id.c_str());
         return false;
     }
@@ -393,13 +473,13 @@ bool pickCube(const std::string& cube_id, const geometry_msgs::Pose& pick_pose)
     return true;
 }
 
-bool placeCube(const std::string& cube_id, const geometry_msgs::Pose& place_pose)
+bool placeCube(const std::string& cube_id, const geometry_msgs::Pose& place_pose, bool execute)
 {
     // Calculate g2 (15 cm above place_pose)
     geometry_msgs::Pose g2 = calculateIntermediatePosition(place_pose);
 
     // Move to g2
-    if (!moveToPosition(g2, "move to position above placement for " + cube_id)) {
+    if (!moveToPosition(g2, "move to position above placement for " + cube_id, execute)) {
         ROS_ERROR("FAILED TO MOVE TO POSITION ABOVE %s FOR PLACING.", cube_id.c_str());
         return false;
     }
@@ -407,18 +487,19 @@ bool placeCube(const std::string& cube_id, const geometry_msgs::Pose& place_pose
     // Lower to place position
     geometry_msgs::Pose lower_pose = place_pose;
     lower_pose.position.z = place_pose.position.z + 0.12;  // Slightly above the target position
-    if (!moveToPosition(lower_pose, "lower to place " + cube_id)) {
+    if (!moveToPosition(lower_pose, "lower to place " + cube_id, execute)) {
         ROS_ERROR("FAILED TO LOWER TO PLACE %s.", cube_id.c_str());
         return false;
     }
 
     // Gripper actions
-    visual_tools.prompt("Press 'next' to open gripper and release " + cube_id);
+    // visual_tools.prompt("Press 'next' to open gripper and release " + cube_id);
 
     detachObject(cube_id);
+    moveGripper(true, execute);
 
     // Move back to g2
-    if (!moveToPosition(g2, "lift after placing " + cube_id)) {
+    if (!moveToPosition(g2, "lift after placing " + cube_id, execute)) {
         ROS_ERROR("FAILED TO LIFT AFTER PLACING %s.", cube_id.c_str());
         return false;
     }
@@ -445,19 +526,11 @@ struct Action {
     Action(Type t, int index1, int index2, int pos) : type(t), cube_index1(index1), cube_index2(index2), position_index(pos) {}
 };
 
-
-
-
-
-
-
-
-
 typedef std::vector<int> State;
 std::vector<int> dynamic_state;
 
 
-bool run(const std::vector<Action>& action_sequence, const State& initial_state) {
+bool run(const std::vector<Action>& action_sequence, const State& initial_state, bool execute) {
     try {
         // Setup and initialization
         ROS_INFO("Adding collision objects...");
@@ -487,8 +560,8 @@ bool run(const std::vector<Action>& action_sequence, const State& initial_state)
             
             // Close the gripper
             ROS_INFO("Closing the gripper with cube %s...", current_cube_id.c_str());
-            if (!moveGripper(false)) {
-                return handleFailure(initial_gripper_pose, current_cube_id, true);
+            if (!moveGripper(false, execute)) {
+                return handleFailure(initial_gripper_pose, current_cube_id, true, execute);
             }
 
             // Attach the cube to the gripper
@@ -508,8 +581,8 @@ bool run(const std::vector<Action>& action_sequence, const State& initial_state)
         } else {
             // Open the gripper
             ROS_INFO("Opening the gripper...");
-            if (!moveGripper(true)) {
-                return handleFailure(initial_gripper_pose, "", true);
+            if (!moveGripper(true, execute)) {
+                return handleFailure(initial_gripper_pose, "", true, execute);
             }
 
             // Disallow all gripper-cube collisions at the start if gripper is empty
@@ -519,29 +592,30 @@ bool run(const std::vector<Action>& action_sequence, const State& initial_state)
         }
 
         for (const auto& action : action_sequence) {
+            visual_tools.prompt("Press 'next' to plan the next action");
             ROS_INFO("Processing action: %d", action.type);
             bool action_success = false;
             switch (action.type) {
                 case Action::PICK:
-                    action_success = handlePickAction(action, dynamic_state, positions, cube_poses, current_cube_id, current_cube_pose, current_pick_position, gripper_has_cube);
+                    action_success = handlePickAction(action, dynamic_state, positions, cube_poses, current_cube_id, current_cube_pose, current_pick_position, gripper_has_cube, execute);
                     break;
                 case Action::PLACE:
-                    action_success = handlePlaceAction(action, dynamic_state, positions, cube_poses, current_cube_id, current_pick_position, gripper_has_cube);
+                    action_success = handlePlaceAction(action, dynamic_state, positions, cube_poses, current_cube_id, current_pick_position, gripper_has_cube, execute);
                     break;
                 case Action::STACK:
-                    action_success = handleStackAction(action, dynamic_state, positions, cube_poses, current_cube_id, current_pick_position, gripper_has_cube);
+                    action_success = handleStackAction(action, dynamic_state, positions, cube_poses, current_cube_id, current_pick_position, gripper_has_cube, execute);
                     break;
                 case Action::UNSTACK:
-                    action_success = handleUnstackAction(action, dynamic_state, positions, cube_poses, current_cube_id, gripper_has_cube);
+                    action_success = handleUnstackAction(action, dynamic_state, positions, cube_poses, current_cube_id, gripper_has_cube, execute);
                     break;
                 default:
                     ROS_ERROR("Unknown action type");
-                    return handleFailure(initial_gripper_pose, current_cube_id, true);
+                    return handleFailure(initial_gripper_pose, current_cube_id, true, execute);
             }
 
             if (!action_success) {
                 ROS_ERROR("Action failed: stopping sequence");
-                return handleFailure(initial_gripper_pose, current_cube_id, true);
+                return handleFailure(initial_gripper_pose, current_cube_id, true, execute);
             }
 
             // Print the current dynamic state for debugging
@@ -554,25 +628,24 @@ bool run(const std::vector<Action>& action_sequence, const State& initial_state)
 
         // Return to starting position
         ROS_INFO("Returning to starting position...");
-        if (!moveToPosition(positions.start_pose, "return to the starting position")) {
-            return handleFailure(initial_gripper_pose, current_cube_id, true);
+        if (!moveToPosition(positions.start_pose, "return to the starting position", execute)) {
+            return handleFailure(initial_gripper_pose, current_cube_id, true, execute);
         }
         
-        ROS_INFO("Press 'next' to end the demo");
         visual_tools.prompt("Press 'next' to end the demo");
 
-        return handleSuccess(current_cube_id, initial_gripper_pose);
+        return handleSuccess(current_cube_id, initial_gripper_pose, execute);
 
     } catch (const std::exception &e) {
         ROS_ERROR("Exception caught in run function: %s", e.what());
-        return handleFailure(geometry_msgs::Pose(), "", true);
+        return handleFailure(geometry_msgs::Pose(), "", true, execute);
     } catch (...) {
         ROS_ERROR("Unknown exception caught in run function");
-        return handleFailure(geometry_msgs::Pose(), "", true);
+        return handleFailure(geometry_msgs::Pose(), "", true, execute);
     }
 }
 
-bool handleFailure(const geometry_msgs::Pose& initial_gripper_pose, const std::string& current_cube_id, bool cleanup)
+bool handleFailure(const geometry_msgs::Pose& initial_gripper_pose, const std::string& current_cube_id, bool cleanup, bool execute)
 {
     // Move gripper back to its original starting position and open it
     ROS_INFO("Returning to initial position and opening gripper due to failure.");
@@ -587,10 +660,10 @@ bool handleFailure(const geometry_msgs::Pose& initial_gripper_pose, const std::s
     disallowAllGripperCubeCollisions();
 
     // Move gripper back to the initial position
-    moveToPosition(initial_gripper_pose, "return to initial position");
+    moveToPosition(initial_gripper_pose, "return to initial position", execute);
     
     // Open gripper before ending
-    moveGripper(true);
+    moveGripper(true, execute);
 
     ROS_ERROR("PLANNING FAILED");
 
@@ -602,7 +675,7 @@ bool handleFailure(const geometry_msgs::Pose& initial_gripper_pose, const std::s
     return false;
 }
 
-bool handleSuccess(std::string& current_cube_id, const geometry_msgs::Pose& initial_gripper_pose)
+bool handleSuccess(std::string& current_cube_id, const geometry_msgs::Pose& initial_gripper_pose, bool execute)
 {
     // Check if the gripper is holding a cube
     if (!current_cube_id.empty()) {
@@ -613,7 +686,7 @@ bool handleSuccess(std::string& current_cube_id, const geometry_msgs::Pose& init
     }
     
     // Open gripper before ending
-    moveGripper(true);
+    moveGripper(true, execute);
 
     // Clear all collision objects from the planning scene
     ROS_INFO("Clearing planning scene...");
@@ -630,7 +703,7 @@ bool handleSuccess(std::string& current_cube_id, const geometry_msgs::Pose& init
 
 
 
-bool handlePickAction(const Action& action, std::vector<int>& dynamic_state, GoalPositions& positions, std::vector<std::pair<std::string, geometry_msgs::Pose>>& cube_poses, std::string& current_cube_id, geometry_msgs::Pose& current_cube_pose, int& current_pick_position, bool& gripper_has_cube) {
+bool handlePickAction(const Action& action, std::vector<int>& dynamic_state, GoalPositions& positions, std::vector<std::pair<std::string, geometry_msgs::Pose>>& cube_poses, std::string& current_cube_id, geometry_msgs::Pose& current_cube_pose, int& current_pick_position, bool& gripper_has_cube, bool execute) {
     if (gripper_has_cube) {
         ROS_ERROR("CANNOT PICK A CUBE. GRIPPER IS ALREADY HOLDING A CUBE.");
         return false;
@@ -682,7 +755,7 @@ bool handlePickAction(const Action& action, std::vector<int>& dynamic_state, Goa
     pick_pose.orientation = tf2::toMsg(q);
 
     // Attempt to pick the cube, return false if it fails
-    if (!pickCube(current_cube_id, pick_pose)) {
+    if (!pickCube(current_cube_id, pick_pose, execute)) {
         return false;
     }
 
@@ -690,17 +763,18 @@ bool handlePickAction(const Action& action, std::vector<int>& dynamic_state, Goa
     dynamic_state[current_pick_position]--;  // Remove the cube from the position
     gripper_has_cube = true;
     dynamic_state[9] = 1;  // Update gripper state
-    planning_scene_interface.clear();
-    ros::Duration(0.1).sleep();
-    addCollisionObjects(dynamic_state);
-
+    if (!execute) {
+        planning_scene_interface.clear();
+        ros::Duration(0.001).sleep();
+        addCollisionObjects(dynamic_state);
+    }
     ROS_INFO("PICK ACTION SUCCEEDED.");
     return true;
 }
 
 
 
-bool handlePlaceAction(const Action& action, std::vector<int>& dynamic_state, GoalPositions& positions, std::vector<std::pair<std::string, geometry_msgs::Pose>>& cube_poses, std::string& current_cube_id, int& current_pick_position, bool& gripper_has_cube) {
+bool handlePlaceAction(const Action& action, std::vector<int>& dynamic_state, GoalPositions& positions, std::vector<std::pair<std::string, geometry_msgs::Pose>>& cube_poses, std::string& current_cube_id, int& current_pick_position, bool& gripper_has_cube, bool execute) {
     if (!gripper_has_cube) {
         ROS_ERROR("CANNOT PLACE A CUBE. GRIPPER IS NOT HOLDING ANY CUBE.");
         return false;
@@ -741,6 +815,8 @@ bool handlePlaceAction(const Action& action, std::vector<int>& dynamic_state, Go
 
         // Allow collision between the current cube and the cube already at the target position
         allowSpecificCubeCollision(current_cube_id, target_cube_id, true);
+        ROS_ERROR("Cannot place cube %s at position %d. There are other cubes at this position.", current_cube_id.c_str(), current_pick_position);
+        return false;
     }
 
     // Adjust height based on how many cubes are already present at the target position
@@ -755,7 +831,7 @@ bool handlePlaceAction(const Action& action, std::vector<int>& dynamic_state, Go
     place_pose.orientation = tf2::toMsg(q);
 
     // Attempt to place the cube, return false if it fails
-    if (!placeCube(current_cube_id, place_pose)) {
+    if (!placeCube(current_cube_id, place_pose, execute)) {
         return false;
     }
 
@@ -784,9 +860,12 @@ bool handlePlaceAction(const Action& action, std::vector<int>& dynamic_state, Go
     current_pick_position = -1;
     gripper_has_cube = false;
     dynamic_state[9] = 0;
-    planning_scene_interface.clear();
-    ros::Duration(0.1).sleep();
-    addCollisionObjects(dynamic_state);
+    if (!execute) {
+        planning_scene_interface.clear();
+        ros::Duration(0.001).sleep();
+        addCollisionObjects(dynamic_state);
+
+    }
 
     ROS_INFO("PLACE ACTION SUCCEEDED.");
     return true;
@@ -799,7 +878,7 @@ bool handlePlaceAction(const Action& action, std::vector<int>& dynamic_state, Go
 
 
 
-bool handleStackAction(const Action& action, std::vector<int>& dynamic_state, GoalPositions& positions, std::vector<std::pair<std::string, geometry_msgs::Pose>>& cube_poses, std::string& current_cube_id, int& current_pick_position, bool& gripper_has_cube) {
+bool handleStackAction(const Action& action, std::vector<int>& dynamic_state, GoalPositions& positions, std::vector<std::pair<std::string, geometry_msgs::Pose>>& cube_poses, std::string& current_cube_id, int& current_pick_position, bool& gripper_has_cube, bool execute) {
     if (!gripper_has_cube) {
         ROS_ERROR("CANNOT STACK A CUBE. GRIPPER IS NOT HOLDING ANY CUBE.");
         return false;
@@ -898,7 +977,7 @@ bool handleStackAction(const Action& action, std::vector<int>& dynamic_state, Go
     allowGripperCubeCollision(cube_to_stack_on);
 
     // Place the cube.
-    if (!placeCube(current_cube_id, place_pose)) {
+    if (!placeCube(current_cube_id, place_pose, execute)) {
         return false;
     }
 
@@ -926,9 +1005,12 @@ bool handleStackAction(const Action& action, std::vector<int>& dynamic_state, Go
     current_cube_id.clear();  // Clear the current cube ID
     gripper_has_cube = false; // The gripper is no longer holding the cube
     current_pick_position = -1;
-    planning_scene_interface.clear();
-    ros::Duration(0.1).sleep();
-    addCollisionObjects(dynamic_state);
+    if (!execute) {
+        planning_scene_interface.clear();
+        ros::Duration(0.001).sleep();
+        addCollisionObjects(dynamic_state);
+
+    }
 
     ROS_INFO("STACK ACTION SUCCEEDED.");
     return true;
@@ -937,7 +1019,7 @@ bool handleStackAction(const Action& action, std::vector<int>& dynamic_state, Go
 
 
 
-bool handleUnstackAction(const Action& action, std::vector<int>& dynamic_state, GoalPositions& positions, std::vector<std::pair<std::string, geometry_msgs::Pose>>& cube_poses, std::string& current_cube_id, bool& gripper_has_cube) {
+bool handleUnstackAction(const Action& action, std::vector<int>& dynamic_state, GoalPositions& positions, std::vector<std::pair<std::string, geometry_msgs::Pose>>& cube_poses, std::string& current_cube_id, bool& gripper_has_cube, bool execute) {
     // Ensure the gripper is empty before unstacking.
     if (gripper_has_cube) {
         ROS_ERROR("CANNOT UNSTACK A CUBE. GRIPPER IS ALREADY HOLDING A CUBE.");
@@ -1003,7 +1085,7 @@ bool handleUnstackAction(const Action& action, std::vector<int>& dynamic_state, 
     pick_pose.orientation = tf2::toMsg(q);
 
     // Attempt to pick the cube.
-    if (!pickCube(cube_to_move, pick_pose)) {
+    if (!pickCube(cube_to_move, pick_pose, execute)) {
         return false;
     }
 
@@ -1021,9 +1103,13 @@ bool handleUnstackAction(const Action& action, std::vector<int>& dynamic_state, 
             allowSpecificCubeCollision(current_cube_id, cube.first, false);
         }
     }
-    planning_scene_interface.clear();
-    ros::Duration(0.1).sleep();
-    addCollisionObjects(dynamic_state);
+
+    if (!execute) {
+        planning_scene_interface.clear();
+        ros::Duration(0.001).sleep();
+        addCollisionObjects(dynamic_state);
+
+    }
 
     ROS_INFO("UNSTACK ACTION SUCCEEDED. Gripper is now holding cube %s.", current_cube_id.c_str());
     return true;
@@ -1081,7 +1167,7 @@ std::vector<int> distributeCubes(int max_cubes, int max_stack_height, const std:
     return dynamic_state;
 }
 
-std::vector<int> generateRandomState2x2(int max_cubes, int max_stack_height) {
+std::vector<int> generateRandomState(int max_cubes, int max_stack_height) {
     // Positions for the 2x2 grid are 0, 1, 3, 4
     std::vector<int> allowed_positions = {0, 1, 3, 4};
     return distributeCubes(max_cubes, max_stack_height, allowed_positions);
@@ -1106,7 +1192,7 @@ int getDifferentRandomCube(int num_cubes, int cube_index1) {
 }
 
 
-Action generateRandomAction2x2(int num_cubes, int random_action) {
+Action generateRandomAction(int num_cubes, int random_action) {
     seedRandomGenerator();
 
     // Check if num_cubes is valid
@@ -1116,7 +1202,6 @@ Action generateRandomAction2x2(int num_cubes, int random_action) {
     }
 
     Action::Type random_type = static_cast<Action::Type>(random_action);
-    std::vector<int> allowed_positions = {0, 1, 3, 4}; // 2x2 grid positions
 
     switch (random_type) {
         case Action::PICK: {
@@ -1125,7 +1210,6 @@ Action generateRandomAction2x2(int num_cubes, int random_action) {
         }
         case Action::PLACE: {
             int cube_index = std::rand() % num_cubes;
-            int position_index = allowed_positions[std::rand() % allowed_positions.size()];
             return Action(Action::PLACE, cube_index, 2);
         }
         case Action::STACK: {
@@ -1136,8 +1220,7 @@ Action generateRandomAction2x2(int num_cubes, int random_action) {
         case Action::UNSTACK: {
             int cube_index1 = std::rand() % num_cubes;
             int cube_index2 = getDifferentRandomCube(num_cubes, cube_index1);
-            int position_index = allowed_positions[std::rand() % allowed_positions.size()];
-            return Action(Action::UNSTACK, cube_index1, cube_index2, position_index);
+            return Action(Action::UNSTACK, cube_index1, cube_index2, 2);
         }
         default:
             ROS_ERROR("Unknown action type generated.");
@@ -1299,7 +1382,8 @@ std::string stateActionToString(const State& state, const Action& action) {
 }
 
 std::tuple<std::vector<State>, std::vector<Action>, std::vector<bool>, std::vector<State>>
-runSimulations2x2(int num_simulations, int max_cubes, int random_action, int max_height) {
+runSimulations(int num_simulations, int max_cubes, int max_height, bool execute,
+                  bool action_select, int action_choice) {
     std::vector<State> states;
     std::vector<Action> actions;
     std::vector<bool> results;
@@ -1316,9 +1400,15 @@ runSimulations2x2(int num_simulations, int max_cubes, int random_action, int max
         try {
             ROS_INFO("Running simulation %d...", simulations_completed + 1);
 
-            State state = generateRandomState2x2(max_cubes, max_height);
-            Action action = generateRandomAction2x2(max_cubes, std::rand() % 4);
-            // Action action = generateRandomAction2x2(max_cubes, 3);
+            State state = generateRandomState(max_cubes, max_height);
+            // Use action_choice if action_select is true; otherwise, generate a random action
+            int action_type;
+            if (action_select) {
+                action_type = action_choice;
+            } else {
+                action_type = std::rand() % 4;  // Assuming there are 4 action types (0 to 3)
+            }
+            Action action = generateRandomAction(max_cubes, action_type);
 
             // Validate action indices
             if (action.cube_index1 >= max_cubes || (action.type == Action::STACK && action.cube_index2 >= max_cubes) || (action.type == Action::UNSTACK && action.cube_index2 >= max_cubes)) {
@@ -1342,7 +1432,7 @@ runSimulations2x2(int num_simulations, int max_cubes, int random_action, int max
             dynamic_state = state;
 
             // Run the simulation with the generated state and action
-            bool result = run({action}, state);
+            bool result = run({action}, state, execute);
 
             // Store results
             states.push_back(state);
@@ -1588,7 +1678,6 @@ PDDLAction convertActionToPDDLAction(const Action& action) {
 //     }
 //     return pddl_action;
 // }
-
 
 
 bool canApplyAction(const std::set<std::string>& state_predicates, const PDDLAction& pddl_action) {
@@ -1930,9 +2019,6 @@ void printSimpleResults(const std::vector<State>& states, const std::vector<Acti
     std::cout << "]\n\n";
 }
 
-
-
-
 void printStateArray(const State& state) {
     std::cout << "[";
     for (size_t j = 0; j < 9; ++j) {
@@ -1940,8 +2026,6 @@ void printStateArray(const State& state) {
     }
     std::cout << "\"Gripper: " << (state[9] == 1 ? "Holding cube" : "Empty") << "\"]";
 }
-
-
 
 void printActionArray(const Action& action) {
     std::cout << "[\"";
@@ -2130,165 +2214,165 @@ int main(int argc, char** argv)
     // Instantiate the planner
     PandaMotionPlanner planner;
 
+    // Whether we want to run a simulation or manually test
+    bool simulation_or_test = false;
+
+    // Whether we want to see actions executed or not
+    bool execute = false;
+
+
+    // Running a simulation
+    if (simulation_or_test) {
     // Set the number of unique simulations to run
-    // int num_simulations = 30; // Desired number of unique simulations
-    // int max_cubes = 2;
-    // int random_action = 0;
-    // int max_height = 2;
+    int num_simulations = 50; // Desired number of unique simulations
+    int max_cubes = 2;
+    int max_height = 2;
 
-    // // Start the timer
-    // auto start_time = std::chrono::high_resolution_clock::now();
-
-    // // Run the simulations and get the results
-    // auto [states, actions, results, resulting_states] = planner.runSimulations2x2(num_simulations, max_cubes, random_action, max_height);
-
-    // // Initialize vectors for precondition and effect results
-    // std::vector<bool> precondition_results;
-    // std::vector<bool> effect_results;
-
-    // // Run the task planning and get the precondition and effect results
-    // planner.runTaskPlanning(states, actions, results, resulting_states, precondition_results, effect_results);
-
-    // // Collect discrepancies and compute metrics
-    // std::vector<std::tuple<PandaMotionPlanner::State, PandaMotionPlanner::Action, std::string>> discrepancies_preconditions;
-    // std::vector<std::tuple<PandaMotionPlanner::State, PandaMotionPlanner::Action, PandaMotionPlanner::State, std::string>> discrepancies_effects;
-
-    // // Initialize counters
-    // int total_plans = results.size();
-    // int motion_successes = 0;
-    // int motion_failures = 0;
-    // int precondition_successes = 0;
-    // int precondition_failures = 0;
-    // int effect_successes = 0;
-    // int effect_failures = 0;
-    // int black_list_type_1 = 0; // Both motion and precondition failed
-    // int white_list_type_1 = 0; // Both motion and precondition succeeded
-    // int black_list_type_2 = 0; // Precondition succeeded, motion failed
-    // int white_list_type_2 = 0; // Precondition failed, motion succeeded
-
-    // for (size_t i = 0; i < total_plans; ++i) {
-    // bool motion_result = results[i];
-    // bool precondition_result = precondition_results[i];
-    // bool effect_result = effect_results[i];
-
-    // // Count motion planning successes and failures
-    // if (motion_result) {
-    //     motion_successes++;
-    // } else {
-    //     motion_failures++;
-    // }
-
-    // // Count precondition successes and failures
-    // if (precondition_result) {
-    //     precondition_successes++;
-    // } else {
-    //     precondition_failures++;
-    // }
-
-    // // Classify into categories based on motion and precondition results
-    // if (!motion_result && !precondition_result) {
-    //     black_list_type_1++;
-    // } else if (motion_result && precondition_result) {
-    //     white_list_type_1++;
-    // } else if (!motion_result && precondition_result) {
-    //     black_list_type_2++;
-    // } else if (motion_result && !precondition_result) {
-    //     white_list_type_2++;
-    // }
-
-    // // Collect discrepancies for preconditions
-    // if (motion_result != precondition_result) {
-    //     std::string discrepancy_info;
-    //     if (motion_result && !precondition_result) {
-    //         discrepancy_info = "Motion Planning SUCCEEDED, Precondition Check FAILED";
-    //         discrepancies_preconditions.push_back(std::make_tuple(states[i], actions[i], discrepancy_info));
-    //     } else if (!motion_result && precondition_result) {
-    //         discrepancy_info = "Motion Planning FAILED, Precondition Check SUCCEEDED";
-    //         discrepancies_preconditions.push_back(std::make_tuple(states[i], actions[i], discrepancy_info));
-    //     }
-    // }
-
-    // // For effect results, only consider cases where motion planning and precondition succeeded
-    // if (motion_result && precondition_result) {
-    //     if (effect_result) {
-    //         effect_successes++;
-    //     } else {
-    //         effect_failures++;
-    //         // Collect discrepancies due to effect mismatches
-    //         discrepancies_effects.push_back(std::make_tuple(states[i], actions[i], resulting_states[i], "Effects not correctly reflected in resulting state"));
-    //     }
-    // }
-    // }
-
-    // // Print the results
-    // planner.printResults(states, actions, results, precondition_results, effect_results, resulting_states);
-    // planner.printSimpleResults(states, actions, results, precondition_results, effect_results, resulting_states);
-
-    // // Print discrepancies
-    // planner.printDiscrepancies(discrepancies_preconditions, discrepancies_effects);
+    // Whether we want to manually select actions or not
+    bool action_select = true;
+    bool action_choice = 0;
 
 
-    // // Print the metrics
-    // planner.printMetrics(total_plans, motion_successes, motion_failures,
-    //              precondition_successes, precondition_failures,
-    //              effect_successes, effect_failures,
-    //              black_list_type_1, white_list_type_1,
-    //              black_list_type_2, white_list_type_2);
+    // Start the timer
+    auto start_time = std::chrono::high_resolution_clock::now();
 
-    // // End the timer after simulations are complete
-    // auto end_time = std::chrono::high_resolution_clock::now();
+    // Run the simulations and get the results
+    auto [states, actions, results, resulting_states] = planner.runSimulations(num_simulations, max_cubes, max_height, execute, action_select, action_choice);
 
+    // Initialize vectors for precondition and effect results
+    std::vector<bool> precondition_results;
+    std::vector<bool> effect_results;
 
-    // // Calculate the elapsed time
-    // std::chrono::duration<double> elapsed_time = end_time - start_time;
-    // ROS_INFO("Total time for %d simulations: %.2f seconds", num_simulations, elapsed_time.count());
+    // Run the task planning and get the precondition and effect results
+    planner.runTaskPlanning(states, actions, results, resulting_states, precondition_results, effect_results);
 
+    // Collect discrepancies and compute metrics
+    std::vector<std::tuple<PandaMotionPlanner::State, PandaMotionPlanner::Action, std::string>> discrepancies_preconditions;
+    std::vector<std::tuple<PandaMotionPlanner::State, PandaMotionPlanner::Action, PandaMotionPlanner::State, std::string>> discrepancies_effects;
 
+    // Initialize counters
+    int total_plans = results.size();
+    int motion_successes = 0;
+    int motion_failures = 0;
+    int precondition_successes = 0;
+    int precondition_failures = 0;
+    int effect_successes = 0;
+    int effect_failures = 0;
+    int black_list_type_1 = 0; // Both motion and precondition failed
+    int white_list_type_1 = 0; // Both motion and precondition succeeded
+    int black_list_type_2 = 0; // Precondition succeeded, motion failed
+    int white_list_type_2 = 0; // Precondition failed, motion succeeded
 
+    for (size_t i = 0; i < total_plans; ++i) {
+    bool motion_result = results[i];
+    bool precondition_result = precondition_results[i];
+    bool effect_result = effect_results[i];
 
-
-
-
-
-
-
-    
-    // Uncomment below for manual testing of a specific state and action sequence
-
-    // Manually define a state
-    // State layout: 9 positions in a 3x3 grid and the last element indicates if the gripper is holding a cube (1 = holding, 0 = empty)
-    PandaMotionPlanner::State manual_state = {2, 1, 0, 0, 2, 0, 0, 0, 0, 1};  // This means: cube at position 0 and 2, gripper is empty
-
-    // Manually define an action sequence
-    // Action Types: PICK (from position), PLACE (to position), STACK (cube on cube), UNSTACK (cube from cube to new position)
-    std::vector<PandaMotionPlanner::Action> manual_actions = {
-        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 2),         // Pick cube from position 0
-        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 3),         // Pick cube from position 0
-        PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 3, 2),         // Pick cube from position 0
-        PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 5, 4),         // Pick cube from position 0
-        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 5, 6),         // Pick cube from position 0
-        PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 3, 2),         // Pick cube from position 0
-        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 3, 7),         // Pick cube from position 0
-        PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 2, 1),         // Pick cube from position 0
-        PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 2, 8),         // Pick cube from position 0
-        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 0),         // Pick cube from position 0
-        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 0, 3),  // Place cube in position 4
-        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 0, 3),         // Pick cube from position 0
-        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 8),         // Pick cube from position 0
-        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 2),         // Pick cube from position 0
-        // PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 2, 3)  // Place cube in position 4
-    };
-
-    // Run the manual state and action sequence
-    bool result = planner.run(manual_actions, manual_state);
-
-    if (result) {
-        ROS_INFO("Manual action sequence executed successfully.");
+    // Count motion planning successes and failures
+    if (motion_result) {
+        motion_successes++;
     } else {
-        ROS_ERROR("Manual action sequence failed.");
+        motion_failures++;
     }
 
+    // Count precondition successes and failures
+    if (precondition_result) {
+        precondition_successes++;
+    } else {
+        precondition_failures++;
+    }
 
+    // Classify into categories based on motion and precondition results
+    if (!motion_result && !precondition_result) {
+        black_list_type_1++;
+    } else if (motion_result && precondition_result) {
+        white_list_type_1++;
+    } else if (!motion_result && precondition_result) {
+        black_list_type_2++;
+    } else if (motion_result && !precondition_result) {
+        white_list_type_2++;
+    }
+
+    // Collect discrepancies for preconditions
+    if (motion_result != precondition_result) {
+        std::string discrepancy_info;
+        if (motion_result && !precondition_result) {
+            discrepancy_info = "Motion Planning SUCCEEDED, Precondition Check FAILED";
+            discrepancies_preconditions.push_back(std::make_tuple(states[i], actions[i], discrepancy_info));
+        } else if (!motion_result && precondition_result) {
+            discrepancy_info = "Motion Planning FAILED, Precondition Check SUCCEEDED";
+            discrepancies_preconditions.push_back(std::make_tuple(states[i], actions[i], discrepancy_info));
+        }
+    }
+
+    // For effect results, only consider cases where motion planning and precondition succeeded
+    if (motion_result && precondition_result) {
+        if (effect_result) {
+            effect_successes++;
+        } else {
+            effect_failures++;
+            // Collect discrepancies due to effect mismatches
+            discrepancies_effects.push_back(std::make_tuple(states[i], actions[i], resulting_states[i], "Effects not correctly reflected in resulting state"));
+        }
+    }
+    }
+
+    // Print the results
+    planner.printResults(states, actions, results, precondition_results, effect_results, resulting_states);
+    planner.printSimpleResults(states, actions, results, precondition_results, effect_results, resulting_states);
+
+    // Print discrepancies
+    planner.printDiscrepancies(discrepancies_preconditions, discrepancies_effects);
+
+
+    // Print the metrics
+    planner.printMetrics(total_plans, motion_successes, motion_failures,
+                 precondition_successes, precondition_failures,
+                 effect_successes, effect_failures,
+                 black_list_type_1, white_list_type_1,
+                 black_list_type_2, white_list_type_2);
+
+    // End the timer after simulations are complete
+    auto end_time = std::chrono::high_resolution_clock::now();
+
+
+    // Calculate the elapsed time
+    std::chrono::duration<double> elapsed_time = end_time - start_time;
+    ROS_INFO("Total time for %d simulations: %.2f seconds", num_simulations, elapsed_time.count());
+    }
+
+    else {
+        // Manually define a state
+        // State layout: 9 positions in a 3x3 grid and the last element indicates if the gripper is holding a cube (1 = holding, 0 = empty)
+        PandaMotionPlanner::State manual_state = {2, 0, 1, 0, 3, 0, 0, 0, 0, 1};  // This means: cube at position 0 and 2, gripper is empty
+
+        // Manually define an action sequence
+        // Action Types: PICK (from position), PLACE (to position), STACK (cube on cube), UNSTACK (cube from cube to new position)
+        std::vector<PandaMotionPlanner::Action> manual_actions = {
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 3),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 2, 1),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 2, 5),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 6, 5),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 6, 0),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 5, 4),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 5, 2),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 1),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 1, 7),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 3),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 3, 1),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 4),         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 4, 1)         // Pick cube from position 0
+        };
+
+        // Run the manual state and action sequence
+        bool result = planner.run(manual_actions, manual_state, execute);
+
+        if (result) {
+            ROS_INFO("Manual action sequence executed successfully.");
+        } else {
+            ROS_ERROR("Manual action sequence failed.");
+        }
+    }
     ros::shutdown();
     return 0;
 }
