@@ -217,10 +217,4 @@ if (result) {
 - **Debugging**: Use `ROS_INFO`, `ROS_WARN`, and `ROS_ERROR` for debugging output.
 - **Metrics Analysis**: After running simulations, review the printed metrics to analyze performance and discrepancies.
 
-## Support
-
-If you encounter issues or have questions, please open an issue on the GitHub repository or contact the maintainer.
-
----
-
 By following this guide, you should be able to run and test various scenarios in the motion planning simulation. Adjust the parameters as needed to explore different configurations and action sequences.

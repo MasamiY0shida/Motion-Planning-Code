@@ -1,5 +1,6 @@
-# README.md
+**README.md**
 
+```markdown
 # Motion Planning Code
 
 Welcome to the **Motion Planning Code** repository! This project implements a motion planning and robotics simulation for a robotic manipulator (specifically, the Panda robot). It allows you to simulate picking, placing, stacking, and unstacking actions with cubes on a 3x3 grid. The code is designed to help understand motion planning algorithms and test various scenarios in robotics.
@@ -17,26 +18,29 @@ Welcome to the **Motion Planning Code** repository! This project implements a mo
 
 - [ROS (Robot Operating System)](http://www.ros.org/) (tested with ROS Melodic and Noetic)
 - [MoveIt!](https://moveit.ros.org/) motion planning framework
+- Panda robot MoveIt! configuration package (`franka_ros` and `panda_moveit_config`)
 - C++ compiler supporting C++11 or higher
 - Other dependencies as specified in your `package.xml` and `CMakeLists.txt`
 
 ### Installation
 
-1. Clone this repository into your ROS workspace:
+1. **Set up your ROS workspace** if you haven't already.
+
+2. **Clone this repository** into your ROS workspace's `src` directory:
 
    ```bash
    cd ~/catkin_ws/src
    git clone https://github.com/yourusername/motion-planning-code.git
    ```
 
-2. Build the package:
+3. **Build the workspace**:
 
    ```bash
    cd ~/catkin_ws
    catkin_make
    ```
 
-3. Source your workspace:
+4. **Source your workspace**:
 
    ```bash
    source devel/setup.bash
@@ -44,25 +48,28 @@ Welcome to the **Motion Planning Code** repository! This project implements a mo
 
 ## Running the Simulation
 
-To run the motion planning simulation, execute the following command:
+To run the motion planning simulation, follow these steps:
 
-```bash
-roslaunch motion_planning_code panda_motion_planner.launch
-```
+1. **Launch the Panda robot MoveIt! demo**:
 
-**Note**: Ensure that you have a ROS master running and the necessary MoveIt! configurations set up for the Panda robot.
+   ```bash
+   roslaunch panda_moveit_config demo.launch
+   ```
+
+2. **In a new terminal**, make sure to source your workspace and then run the motion planning node:
+
+   ```bash
+   source ~/catkin_ws/devel/setup.bash
+   rosrun motion_planning motion_planning_node
+   ```
+
+   **Note**: Replace `motion_planning` with your actual package name and `motion_planning_node` with the name of your executable if different.
+
+**Ensure** that you have a ROS master running and that the necessary MoveIt! configurations are set up for the Panda robot.
 
 ## Documentation
 
 - [Code Instructions](CodeInstructions.md): Detailed guide on how to run and test the motion planning and robotics simulation.
 
-## Contributing
-
-Contributions are welcome! Please submit a pull request or open an issue to discuss changes.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
+```
 
