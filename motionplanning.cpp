@@ -1997,7 +1997,7 @@ void printSimpleResults(const std::vector<State>& states, const std::vector<Acti
 
     // Print the results side by side
     std::cout << "Results:\n";
-    std::cout << "Index\tMotion Planning\tPreconditions\tEffects\n";
+    std::cout << "Index\tD_c\tD_f\tEffects\n";
     std::cout << "-----------------------------------------------------------\n";
     for (size_t i = 0; i < motion_results.size(); ++i) {
         std::cout << i << "\t";
@@ -2168,23 +2168,19 @@ void printMetrics(int total_plans, int motion_successes, int motion_failures,
                   int black_list_type_2, int white_list_type_2) {
     std::cout << "\n--- Metrics Summary ---\n";
     std::cout << "Total Plans Generated: " << total_plans << "\n";
-    std::cout << "Motion Planning Successes: " << motion_successes << "\n";
-    std::cout << "Motion Planning Failures: " << motion_failures << "\n";
-    std::cout << "Precondition Successes: " << precondition_successes << "\n";
-    std::cout << "Precondition Failures: " << precondition_failures << "\n";
-    std::cout << "Effect Successes: " << effect_successes << "\n";
-    std::cout << "Effect Failures: " << effect_failures << "\n\n";
+    std::cout << "D_c Successes: " << motion_successes << "\n";
+    std::cout << "D_c Failures: " << motion_failures << "\n";
+    std::cout << "D_f Successes: " << precondition_successes << "\n";
+    std::cout << "D_f Failures: " << precondition_failures << "\n";
+    std::cout << "Effect Successes (From When Both D_c and D_f Succeeds): " << effect_successes << "\n";
+    std::cout << "Effect Failures (From When Both D_c and D_f Succeeds): " << effect_failures << "\n\n";
 
-    std::cout << "Classification Counts (Based on Motion Planning and Precondition Results):\n";
+    std::cout << "Classification Counts (Based on D_c and D_f Results):\n";
     std::cout << "Black List Type 1 (Both Failed): " << black_list_type_1 << "\n";
     std::cout << "White List Type 1 (Both Succeeded): " << white_list_type_1 << "\n";
-    std::cout << "Black List Type 2 (Precondition Succeeded, Motion Failed): " << black_list_type_2 << "\n";
-    std::cout << "White List Type 2 (Precondition Failed, Motion Succeeded): " << white_list_type_2 << "\n";
+    std::cout << "Black List Type 2 (D_f Succeeded, D_c Failed): " << black_list_type_2 << "\n";
+    std::cout << "White List Type 2 (D_f Failed, D_c Succeeded): " << white_list_type_2 << "\n";
 }
-
-
-
-
 
 private:
   moveit::planning_interface::MoveGroupInterface arm_move_group;
@@ -2197,6 +2193,10 @@ private:
   moveit_msgs::Constraints test_constraints;
   std::vector<CubePosition> base_positions;
 };
+
+
+
+
 
 int main(int argc, char** argv)
 {
@@ -2214,10 +2214,10 @@ int main(int argc, char** argv)
     // Instantiate the planner
     PandaMotionPlanner planner;
 
-    // Whether we want to run a simulation or manually test
-    bool simulation_or_test = false;
+    // Whether we want to run a simulation or manually test (true = simulation, false = manual testing)
+    bool simulation_or_test = true;
 
-    // Whether we want to see actions executed or not
+    // Whether we want to see actions executed or not (or just the planning part, to save time)
     bool execute = false;
 
 
@@ -2225,12 +2225,12 @@ int main(int argc, char** argv)
     if (simulation_or_test) {
     // Set the number of unique simulations to run
     int num_simulations = 50; // Desired number of unique simulations
-    int max_cubes = 2;
-    int max_height = 2;
+    int max_cubes = 2; // Number of Cubes in the planning scene
+    int max_height = 2; // Maximum height of each cube stack in the initial state
 
     // Whether we want to manually select actions or not
-    bool action_select = true;
-    bool action_choice = 0;
+    bool action_select = false;
+    bool action_choice = 0; // 0 = PICK, 1 = PLACE, 2 = STACK, 3 = UNSTACK
 
 
     // Start the timer
@@ -2252,12 +2252,12 @@ int main(int argc, char** argv)
 
     // Initialize counters
     int total_plans = results.size();
-    int motion_successes = 0;
-    int motion_failures = 0;
-    int precondition_successes = 0;
-    int precondition_failures = 0;
-    int effect_successes = 0;
-    int effect_failures = 0;
+    int motion_successes = 0; // D_c Successes
+    int motion_failures = 0; // D_c Fails
+    int precondition_successes = 0; // D_f Successes
+    int precondition_failures = 0; // D_f Fails
+    int effect_successes = 0; // Effect Successes (For when both D_c and D_f succeeds)
+    int effect_failures = 0; // Effect Fails (For when both D_c and D_f succeeds)
     int black_list_type_1 = 0; // Both motion and precondition failed
     int white_list_type_1 = 0; // Both motion and precondition succeeded
     int black_list_type_2 = 0; // Precondition succeeded, motion failed
@@ -2268,21 +2268,21 @@ int main(int argc, char** argv)
     bool precondition_result = precondition_results[i];
     bool effect_result = effect_results[i];
 
-    // Count motion planning successes and failures
+    // Count D_c successes and failures
     if (motion_result) {
         motion_successes++;
     } else {
         motion_failures++;
     }
 
-    // Count precondition successes and failures
+    // Count D_f successes and failures
     if (precondition_result) {
         precondition_successes++;
     } else {
         precondition_failures++;
     }
 
-    // Classify into categories based on motion and precondition results
+    // Classify into categories based on D_c and D_f results
     if (!motion_result && !precondition_result) {
         black_list_type_1++;
     } else if (motion_result && precondition_result) {
@@ -2305,7 +2305,7 @@ int main(int argc, char** argv)
         }
     }
 
-    // For effect results, only consider cases where motion planning and precondition succeeded
+    // For effect results, only consider cases where D_c and D_f succeeded
     if (motion_result && precondition_result) {
         if (effect_result) {
             effect_successes++;
@@ -2341,28 +2341,77 @@ int main(int argc, char** argv)
     ROS_INFO("Total time for %d simulations: %.2f seconds", num_simulations, elapsed_time.count());
     }
 
-    else {
-        // Manually define a state
-        // State layout: 9 positions in a 3x3 grid and the last element indicates if the gripper is holding a cube (1 = holding, 0 = empty)
-        PandaMotionPlanner::State manual_state = {2, 0, 1, 0, 3, 0, 0, 0, 0, 1};  // This means: cube at position 0 and 2, gripper is empty
 
+    // Setup for if we want to manually test our robotics motion planner
+    else {
+    // Manually define a state
+    // State layout: 9 positions in a 3x3 grid (indices 0 to 8)
+    // The last element indicates if the gripper is holding a cube (1 = holding, 0 = empty)
+    // According to the naming convention:
+    // - If the gripper is holding a block (g = 1), this block is named cube_0.
+    // - Cubes on the table are assigned IDs starting from cube_1, in order from top-left to bottom-right positions.
+    // - At any location where there is more than one block, the block with the higher numerical ID is on top of the block with the lower numerical ID.
+    PandaMotionPlanner::State manual_state = {0, 1, 0,
+                                                  0, 3, 0,
+                                                  1, 0, 1,
+                                                        1};  // This means: gripper is holding cube_0
+                                                             // cube_1 at position 1
+
+                                                // State (with cube_ids) should look like this:
+                                                /*
+                                                Positions (indices):
+                                                [0]: []               // Position 0, no cubes
+                                                [1]: [cube_1]         // Position 1, cube_1 on table
+                                                [2]: []               // Position 2, no cubes
+                                                [3]: []               // Position 3, no cubes
+                                                [4]: [cube_4 (top), cube_3, cube_2 (bottom)] // Position 4, stack of 3 cubes
+                                                [5]: []               // Position 5, no cubes
+                                                [6]: [cube_5]         // Position 6, cube_5 on table
+                                                [7]: []               // Position 7, no cubes
+                                                [8]: [cube_6]         // Position 8, cube_6 on table
+                                                Gripper is holding cube_0
+                                                */
         // Manually define an action sequence
         // Action Types: PICK (from position), PLACE (to position), STACK (cube on cube), UNSTACK (cube from cube to new position)
         std::vector<PandaMotionPlanner::Action> manual_actions = {
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 3),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 2, 1),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 2, 5),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 6, 5),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 6, 0),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 5, 4),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 5, 2),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 1),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 1, 7),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 3),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 3, 1),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 4),         // Pick cube from position 0
-            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 4, 1)         // Pick cube from position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 0),         // Place cube_0 at position 0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 4, 3),       // Unstack cube_4 from cube_3
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 4, 5),         // Place cube_4 at position 5
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 3, 2),       // Unstack cube_4 from cube_3
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 3, 7),         // Place cube_3 at position 7
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 6),             // Pick cube_6    
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 6, 3),         // Place cube_6 at position 3     
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 5),             // Pick cube_5
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 5, 2),         // Place cube_5 at position 2   
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 1),             // Pick cube_1
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 1, 0),         // Stack cube_1 onto cube_0
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 2),             // Pick cube_2
+            PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 2, 5)          // Stack cube_2 onto cube_5
+
         };
+
+        // Resulting State should look like this: 
+        /* 
+        {2, 0, 2,
+         1, 0, 1,
+         0, 1, 0,
+               0}
+        */
+
+       // State (with cube_ids) should look like this:
+        /*
+        Positions:
+        [0]: [cube_1 (top), cube_0 (bottom)]   // Position 0: cube_1 stacked onto cube_0
+        [1]: []                                // Position 1: empty
+        [2]: [cube_2 (top), cube_5 (bottom)]   // Position 2: cube_2 stacked onto cube_5
+        [3]: [cube_6]                          // Position 3: cube_6 on table
+        [4]: []                                // Position 4: empty
+        [5]: [cube_4]                          // Position 5: cube_4 on table
+        [6]: []                                // Position 6: empty
+        [7]: [cube_3]                          // Position 7: cube_3 on table
+        [8]: []                                // Position 8: empty
+        Gripper is empty
+        */
 
         // Run the manual state and action sequence
         bool result = planner.run(manual_actions, manual_state, execute);
