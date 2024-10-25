@@ -369,10 +369,4 @@ The code includes several print functions to display detailed information:
 - **Debugging**: Use `ROS_INFO`, `ROS_WARN`, and `ROS_ERROR` for debugging output.
 - **Metrics Analysis**: Focus on the output of the `printMetrics` function for a quick and comprehensive understanding of the simulation results.
 
-## Support
-
-If you encounter issues or have questions, please refer to the [ROS Tutorials](http://wiki.ros.org/ROS/Tutorials) for guidance on setting up your environment, creating packages, and working with nodes. You can also open an issue on the GitHub repository or contact the maintainer.
-
----
-
 By following this guide, you can easily adjust the simulation parameters or define manual tests, run the motion planning simulation, and analyze the results. The `printMetrics` function provides a concise and comprehensive summary, which is especially useful for reviewing the overall performance and outcomes of your simulations.
