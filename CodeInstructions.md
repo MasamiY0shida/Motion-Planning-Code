@@ -1,8 +1,6 @@
-# CodeInstructions.md
-
 # Code Instructions
 
-This guide explains how to run and test the motion planning and robotics simulation. The main function in `panda_motion_planner.cpp` is where you can adjust parameters and define what you want to test.
+This guide explains how to run and test the motion planning and robotics simulation. All the **motion planning**, **checking against PDDL**, **comparing D<sub>f</sub> and D<sub>c</sub>**, as well as the **plan classification** parts are **self-contained** in the code. You only need to specify the parameters you want to run the simulation with (if you choose to run the simulation), or define your own manual test. The code handles everything else.
 
 ## Table of Contents
 
@@ -14,7 +12,13 @@ This guide explains how to run and test the motion planning and robotics simulat
   - [Simulation Parameters](#simulation-parameters)
   - [Execution Mode](#execution-mode)
   - [Action Selection](#action-selection)
+- [Analyzing the Results](#analyzing-the-results)
+  - [Metrics Summary](#metrics-summary)
+  - [Print Functions](#print-functions)
 - [Running the Code](#running-the-code)
+- [Additional Information](#additional-information)
+- [Tips](#tips)
+- [Support](#support)
 
 ## Understanding the Main Function
 
@@ -34,7 +38,7 @@ int main(int argc, char** argv)
 
     // Parameters to adjust
     bool simulation_or_test = true; // true = simulation, false = manual testing
-    bool execute = false; // true = execute actions, false = planning only
+    bool execute = false;           // true = execute actions, false = planning only
 
     if (simulation_or_test) {
         // Simulation parameters and execution
@@ -46,6 +50,8 @@ int main(int argc, char** argv)
     return 0;
 }
 ```
+
+All the **motion planning**, **checking against PDDL**, **comparing D<sub>f</sub> and D<sub>c</sub>**, and **plan classification** are handled within the code above. You only need to adjust the parameters in the `main` function to run simulations or manual tests according to your requirements.
 
 ## Simulation vs. Manual Testing
 
@@ -72,11 +78,13 @@ bool action_select = false; // false = random actions, true = manual action sele
 int action_choice = 0;      // 0 = PICK, 1 = PLACE, 2 = STACK, 3 = UNSTACK
 ```
 
-- **num_simulations**: The number of unique simulations you want to run.
-- **max_cubes**: The total number of cubes available in the simulation.
-- **max_height**: The maximum number of cubes that can be stacked at a single position.
-- **action_select**: Choose whether to select actions manually or use random actions.
-- **action_choice**: If `action_select` is `true`, specify which action to simulate:
+- **`simulation_or_test`**: Set to `true` to run simulations.
+- **`execute`**: Choose whether to execute actions (`true`) or just perform planning (`false`).
+- **`num_simulations`**: The number of unique simulations you want to run.
+- **`max_cubes`**: The total number of cubes available in the simulation.
+- **`max_height`**: The maximum number of cubes that can be stacked at a single position.
+- **`action_select`**: Choose whether to select actions manually or use random actions.
+- **`action_choice`**: If `action_select` is `true`, specify which action to simulate:
   - `0`: PICK
   - `1`: PLACE
   - `2`: STACK
@@ -84,18 +92,65 @@ int action_choice = 0;      // 0 = PICK, 1 = PLACE, 2 = STACK, 3 = UNSTACK
 
 #### Running the Simulations
 
-The simulations collect data on motion planning success, precondition checks, and effect checks. Metrics and discrepancies are printed after the simulations are complete.
+The simulations perform the following steps:
+
+1. **Motion Planning**: Generates random initial states and actions (or uses specified actions) and attempts to perform motion planning for each action.
+2. **Task-Level Feasibility Check (D<sub>f</sub>)**: Checks the preconditions and effects of each action against a PDDL representation of the task domain to determine task-level feasibility.
+3. **Comparing D<sub>c</sub> and D<sub>f</sub>**: Compares the motion-level feasibility (D<sub>c</sub>) and task-level feasibility (D<sub>f</sub>) for each plan.
+4. **Plan Classification**: Classifies plans based on the outcomes of D<sub>c</sub> and D<sub>f</sub>.
+
+All these processes are handled internally by the code. You only need to set the parameters as shown above.
+
+Here's how to run the simulations and analyze the results:
 
 ```cpp
+// Start the timer
+auto start_time = std::chrono::high_resolution_clock::now();
+
 // Run the simulations and get the results
 auto [states, actions, results, resulting_states] = planner.runSimulations(
     num_simulations, max_cubes, max_height, execute, action_select, action_choice
 );
 
-// Analyze and print results
+// Initialize vectors for precondition and effect results
+std::vector<bool> precondition_results;
+std::vector<bool> effect_results;
+
+// Run the task planning and get the precondition and effect results
 planner.runTaskPlanning(states, actions, results, resulting_states, precondition_results, effect_results);
+
+// Collect discrepancies and compute metrics
+// (Metrics calculation code here)
+
+// Print the results
 planner.printResults(states, actions, results, precondition_results, effect_results, resulting_states);
+
+// Print discrepancies
+planner.printDiscrepancies(discrepancies_preconditions, discrepancies_effects);
+
+// Print the metrics (provides a comprehensive summary)
+planner.printMetrics(total_plans, motion_successes, motion_failures,
+                     precondition_successes, precondition_failures,
+                     effect_successes, effect_failures,
+                     black_list_type_1, white_list_type_1,
+                     black_list_type_2, white_list_type_2);
+
+// End the timer after simulations are complete
+auto end_time = std::chrono::high_resolution_clock::now();
+
+// Calculate the elapsed time
+std::chrono::duration<double> elapsed_time = end_time - start_time;
+ROS_INFO("Total time for %d simulations: %.2f seconds", num_simulations, elapsed_time.count());
 ```
+
+The `printMetrics` function gives a **comprehensive summary** of the results in a short and neat table. It's usually the most important output to look at because it's concise, easy to read, and contains essential information such as:
+
+- Number of plans sampled
+- Plan classifications based on D<sub>c</sub> and D<sub>f</sub> outcomes
+- Successes and failures of motion planning and task-level feasibility checks
+- Time taken for simulations
+
+This summary is displayed at the **end of the output**, making it easy to locate and review.
 
 ### Manual Testing
 
@@ -118,20 +173,63 @@ PandaMotionPlanner::State manual_state = {
     1 // Gripper is holding a cube (cube_0)
 };
 
+// State (with cube_ids) should look like this:
+/*
+Positions (indices):
+[0]: []               // Position 0, no cubes
+[1]: [cube_1]         // Position 1, cube_1 on table
+[2]: []               // Position 2, no cubes
+[3]: []               // Position 3, no cubes
+[4]: [cube_4 (top), cube_3, cube_2 (bottom)] // Position 4, stack of 3 cubes
+[5]: []               // Position 5, no cubes
+[6]: [cube_5]         // Position 6, cube_5 on table
+[7]: []               // Position 7, no cubes
+[8]: [cube_6]         // Position 8, cube_6 on table
+Gripper is holding cube_0
+*/
+
 // Manually define an action sequence
 std::vector<PandaMotionPlanner::Action> manual_actions = {
+    // Place cube_0 (from gripper) at position 0
     PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 0, 0),
+
+    // Unstack cube_4 (topmost) from cube_3 at position 4
     PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 4, 3),
-    // ... (other actions)
+
+    // Place cube_4 at position 5
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 4, 5),
+
+    // Unstack cube_3 (now topmost) from cube_2 at position 4
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::UNSTACK, 3, 2),
+
+    // Place cube_3 at position 7
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 3, 7),
+
+    // Pick cube_6 from position 8
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 6),
+
+    // Place cube_6 at position 3
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 6, 3),
+
+    // Pick cube_5 from position 6
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 5),
+
+    // Place cube_5 at position 2
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::PLACE, 5, 2),
+
+    // Pick cube_1 from position 1
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 1),
+
+    // Stack cube_1 onto cube_0 at position 0
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 1, 0),
+
+    // Pick cube_2 from position 4 (now the only cube there)
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::PICK, 2),
+
+    // Stack cube_2 onto cube_5 at position 2
+    PandaMotionPlanner::Action(PandaMotionPlanner::Action::STACK, 2, 5)
 };
-```
 
-- **manual_state**: Defines the initial positions and stack heights of cubes on the 3x3 grid. The last element indicates if the gripper is holding a cube (`1`) or not (`0`).
-- **manual_actions**: A sequence of actions for the robot to perform.
-
-#### Running the Manual Test
-
-```cpp
 // Run the manual state and action sequence
 bool result = planner.run(manual_actions, manual_state, execute);
 
@@ -142,30 +240,62 @@ if (result) {
 }
 ```
 
+- **`simulation_or_test`**: Set to `false` for manual testing.
+- **`execute`**: Choose whether to execute actions (`true`) or just perform planning (`false`).
+- **`manual_state`**: Define your custom initial state.
+- **`manual_actions`**: Define your custom sequence of actions.
+
 ## Adjusting Parameters
 
 ### Simulation Parameters
 
-- **Number of Simulations (`num_simulations`)**: Increase or decrease to run more or fewer simulations.
-- **Number of Cubes (`max_cubes`)**: Set the total number of cubes in the simulation.
-- **Maximum Stack Height (`max_height`)**: Limit how high the cubes can be stacked.
+You can adjust the parameters in the `main` function to customize your simulations:
+
+- **`num_simulations`**: Set the number of simulations to run.
+- **`max_cubes`**: Specify the total number of cubes.
+- **`max_height`**: Define the maximum stack height per position.
 
 ### Execution Mode
 
-- **Execute Actions (`execute`)**:
-  - `true`: The robot will execute the actions (requires more computation and visualization).
-  - `false`: Only planning is performed without execution (faster).
+- **`execute`**:
+  - Set to `true` to execute actions and visualize them (requires more computation and visualization tools like RViz).
+  - Set to `false` to only perform planning without execution (faster).
 
 ### Action Selection
 
-- **Action Select (`action_select`)**:
-  - `false`: Actions are selected randomly.
-  - `true`: You can manually select which action type to simulate.
-- **Action Choice (`action_choice`)**:
-  - `0`: PICK
-  - `1`: PLACE
-  - `2`: STACK
-  - `3`: UNSTACK
+- **`action_select`**:
+  - Set to `false` to use random actions in simulations.
+  - Set to `true` to manually select the action type for simulations.
+- **`action_choice`**:
+  - If `action_select` is `true`, specify the action type:
+    - `0`: PICK
+    - `1`: PLACE
+    - `2`: STACK
+    - `3`: UNSTACK
+
+## Analyzing the Results
+
+### Metrics Summary
+
+After running simulations, the code provides a **comprehensive summary** of the results using the `printMetrics` function. This function outputs a neat table containing:
+
+- **Total number of plans generated**
+- **Successes and failures of motion planning (D<sub>c</sub>)**
+- **Successes and failures of task-level feasibility checks (D<sub>f</sub>)**
+- **Successes and failures of effect checks** (when both D<sub>c</sub> and D<sub>f</sub> succeed)
+- **Plan classifications** based on D<sub>c</sub> and D<sub>f</sub> outcomes
+- **Time taken** for the simulations
+
+The metrics summary is displayed at the **end of the output**, making it easy to locate and review. This summary provides a quick and comprehensive overview of the simulation results and is usually the most important part to look at.
+
+### Print Functions
+
+The code includes several print functions to display detailed information:
+
+- **`printResults`**: Displays detailed results for each simulation, including initial states, actions, motion planning results, precondition checks, and effect checks.
+- **`printSimpleResults`**: Provides a concise version of the results.
+- **`printDiscrepancies`**: Highlights any discrepancies between motion planning and task-level feasibility checks.
+- **`printMetrics`**: Outputs the comprehensive summary of the results (as described above).
 
 ## Running the Code
 
@@ -181,19 +311,41 @@ if (result) {
    source devel/setup.bash
    ```
 
-3. **Run the Planner**:
+3. **Launch the Panda Robot Simulation with MoveIt!**:
+
+   In a new terminal (remember to source your workspace), run:
 
    ```bash
-   rosrun motion_planning_code panda_motion_planner
+   roslaunch panda_moveit_config demo.launch
    ```
 
-   **Note**: Replace `motion_planning_code` with your actual package name if different.
+4. **Run the Motion Planning Node**:
 
-4. **Adjust Parameters**:
+   In another terminal (source your workspace), run:
 
-   - Open `panda_motion_planner.cpp`.
+   ```bash
+   rosrun motion_planning motion_planning_node
+   ```
+
+   **Note**: The package is called `motion_planning`, and the node is `motion_planning_node`. Ensure your directory structure is as follows:
+
+   ```
+   catkin_ws/
+     src/
+       motion_planning/
+         src/
+           motion_planning_node.cpp
+         launch/
+         CMakeLists.txt
+         package.xml
+         ... (other files)
+   ```
+
+5. **Adjust Parameters**:
+
+   - Open `motion_planning_node.cpp`.
    - Modify the parameters in the `main` function as described above.
-   - Recompile and rerun the code to see the effects of your changes.
+   - Recompile (`catkin_make`) and rerun the code to see the effects of your changes.
 
 ## Additional Information
 
@@ -215,6 +367,12 @@ if (result) {
 
 - **Visualization**: If you have a visualization tool like RViz set up with MoveIt!, you can set `execute` to `true` to see the robot perform the actions.
 - **Debugging**: Use `ROS_INFO`, `ROS_WARN`, and `ROS_ERROR` for debugging output.
-- **Metrics Analysis**: After running simulations, review the printed metrics to analyze performance and discrepancies.
+- **Metrics Analysis**: Focus on the output of the `printMetrics` function for a quick and comprehensive understanding of the simulation results.
 
-By following this guide, you should be able to run and test various scenarios in the motion planning simulation. Adjust the parameters as needed to explore different configurations and action sequences.
+## Support
+
+If you encounter issues or have questions, please refer to the [ROS Tutorials](http://wiki.ros.org/ROS/Tutorials) for guidance on setting up your environment, creating packages, and working with nodes. You can also open an issue on the GitHub repository or contact the maintainer.
+
+---
+
+By following this guide, you can easily adjust the simulation parameters or define manual tests, run the motion planning simulation, and analyze the results. The `printMetrics` function provides a concise and comprehensive summary, which is especially useful for reviewing the overall performance and outcomes of your simulations.
