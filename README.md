@@ -1,6 +1,6 @@
-**README.md**
+# Motion-Planning-Code
+# README.md
 
-```markdown
 # Motion Planning Code
 
 Welcome to the **Motion Planning Code** repository! This project implements a motion planning and robotics simulation for a robotic manipulator (specifically, the Panda robot). It allows you to simulate picking, placing, stacking, and unstacking actions with cubes on a 3x3 grid. The code is designed to help understand motion planning algorithms and test various scenarios in robotics.
@@ -18,7 +18,6 @@ Welcome to the **Motion Planning Code** repository! This project implements a mo
 
 - [ROS (Robot Operating System)](http://www.ros.org/) (tested with ROS Melodic and Noetic)
 - [MoveIt!](https://moveit.ros.org/) motion planning framework
-- **Panda robot MoveIt! configuration package (`panda_moveit_config`)**
 - C++ compiler supporting C++11 or higher
 - Other dependencies as specified in your `package.xml` and `CMakeLists.txt`
 
@@ -42,8 +41,10 @@ Navigate to the `src` directory of your workspace and clone this repository:
 
 ```bash
 cd ~/catkin_ws/src
-git clone https://github.com/MasamiY0shida/motion_planning.git
+git clone https://github.com/yourusername/motion_planning.git
 ```
+
+**Note**: Replace `yourusername` with your GitHub username or the appropriate repository URL.
 
 The directory structure should now look like this:
 
@@ -121,10 +122,29 @@ To run the motion planning simulation, follow these steps:
    rosrun motion_planning motion_planning_node
    ```
 
-**Note**: If your package name or node name is different, adjust the command accordingly.
+**Note**: Ensure that you have sourced your workspace in each terminal before running these commands. Also ensure you have a ROS master running and the necessary MoveIt! configurations set up for the Panda robot.
 
 ## Documentation
 
-- [Code Instructions](CodeInstructions.md): Detailed guide on how to run and test the motion planning and robotics simulation, including how to adjust parameters and define custom tests.
-
+- [Code Instructions](CodeInstructions.md): Detailed guide on how to run and test the motion planning and robotics simulation.
 ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
