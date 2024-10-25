@@ -1,0 +1,44 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/masamiyoshida/catkin_ws/devel/include/**",
+        "/home/masamiyoshida/ws_moveit/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/masamiyoshida/catkin_ws/src/beginner_tutorials/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_planners/chomp/chomp_motion_planner/include/**",
+        "/home/masamiyoshida/ws_moveit/src/geometric_shapes/include/**",
+        "/home/masamiyoshida/catkin_ws/src/motion_planning/include/**",
+        "/home/masamiyoshida/catkin_ws/src/moveit_grasps/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_planners/chomp/chomp_interface/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit_resources/prbt_ikfast_manipulator_plugin/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_ros/benchmarks/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_plugins/moveit_ros_control_interface/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_ros/move_group/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_ros/occupancy_map_monitor/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_ros/robot_interaction/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_ros/moveit_servo/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_setup_assistant/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_plugins/moveit_simple_controller_manager/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit_visual_tools/include/**",
+        "/home/masamiyoshida/catkin_ws/src/my_robot/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_planners/pilz_industrial_motion_planner/include/**",
+        "/home/masamiyoshida/ws_moveit/src/moveit/moveit_planners/pilz_industrial_motion_planner_testutils/include/**",
+        "/home/masamiyoshida/ws_moveit/src/rviz_visual_tools/include/**",
+        "/home/masamiyoshida/ws_moveit/src/srdfdom/include/**",
+        "/home/masamiyoshida/catkin_ws/src/using_markers/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-arm64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

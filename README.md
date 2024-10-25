@@ -1,6 +1,6 @@
-# Motion-Planning-Code
-# README.md
+**README.md**
 
+```markdown
 # Motion Planning Code
 
 Welcome to the **Motion Planning Code** repository! This project implements a motion planning and robotics simulation for a robotic manipulator (specifically, the Panda robot). It allows you to simulate picking, placing, stacking, and unstacking actions with cubes on a 3x3 grid. The code is designed to help understand motion planning algorithms and test various scenarios in robotics.
@@ -18,30 +18,82 @@ Welcome to the **Motion Planning Code** repository! This project implements a mo
 
 - [ROS (Robot Operating System)](http://www.ros.org/) (tested with ROS Melodic and Noetic)
 - [MoveIt!](https://moveit.ros.org/) motion planning framework
+- **Panda robot MoveIt! configuration package (`panda_moveit_config`)**
 - C++ compiler supporting C++11 or higher
 - Other dependencies as specified in your `package.xml` and `CMakeLists.txt`
 
-### Installation
+### Setup
 
-1. Clone this repository into your ROS workspace:
+To replicate the setup and run the motion planning code, follow these steps:
 
-   ```bash
-   cd ~/catkin_ws/src
-   git clone https://github.com/yourusername/motion-planning-code.git
-   ```
+#### 1. Set Up Your ROS Workspace
 
-2. Build the package:
+If you haven't already set up a ROS workspace, follow the [ROS Tutorials](http://wiki.ros.org/ROS/Tutorials/InstallingandConfiguringROSEnvironment) to create one:
 
-   ```bash
-   cd ~/catkin_ws
-   catkin_make
-   ```
+```bash
+mkdir -p ~/catkin_ws/src
+cd ~/catkin_ws/
+catkin_make
+```
 
-3. Source your workspace:
+#### 2. Clone the `motion_planning` Package
 
-   ```bash
-   source devel/setup.bash
-   ```
+Navigate to the `src` directory of your workspace and clone this repository:
+
+```bash
+cd ~/catkin_ws/src
+git clone https://github.com/MasamiY0shida/motion_planning.git
+```
+
+The directory structure should now look like this:
+
+```
+catkin_ws/
+  src/
+    motion_planning/
+      src/
+        motion_planning_node.cpp
+      launch/
+      CMakeLists.txt
+      package.xml
+      ... (other files)
+```
+
+#### 3. Ensure `panda_moveit_config` is Installed
+
+The simulation relies on the `panda_moveit_config` package. If you don't have it installed, you can install it using:
+
+```bash
+sudo apt-get install ros-<distro>-panda-moveit-config
+```
+
+Replace `<distro>` with your ROS distribution, e.g., `melodic` or `noetic`.
+
+Alternatively, you can clone it into your workspace:
+
+```bash
+cd ~/catkin_ws/src
+git clone https://github.com/ros-planning/panda_moveit_config.git
+```
+
+#### 4. Build the Workspace
+
+After adding the `motion_planning` package (and `panda_moveit_config` if needed), build your workspace:
+
+```bash
+cd ~/catkin_ws
+catkin_make
+```
+
+#### 5. Source Your Workspace
+
+Source your workspace to overlay the new packages:
+
+```bash
+source ~/catkin_ws/devel/setup.bash
+```
+
+You should do this in every new terminal before running ROS commands.
 
 ## Running the Simulation
 
@@ -49,28 +101,30 @@ To run the motion planning simulation, follow these steps:
 
 1. **Launch the Panda robot simulation with MoveIt!**:
 
+   In a terminal, run:
+
    ```bash
    roslaunch panda_moveit_config demo.launch
    ```
 
 2. **In a new terminal, run the motion planning node**:
 
+   Remember to source your workspace in this terminal:
+
+   ```bash
+   source ~/catkin_ws/devel/setup.bash
+   ```
+
+   Then run:
+
    ```bash
    rosrun motion_planning motion_planning_node
    ```
 
-**Note**: Ensure that you have sourced your workspace in each terminal before running these commands. Also ensure you have a ROS master running and the necessary MoveIt! configurations set up for the Panda robot.
+**Note**: If your package name or node name is different, adjust the command accordingly.
 
 ## Documentation
 
-- [Code Instructions](CodeInstructions.md): Detailed guide on how to run and test the motion planning and robotics simulation.
+- [Code Instructions](CodeInstructions.md): Detailed guide on how to run and test the motion planning and robotics simulation, including how to adjust parameters and define custom tests.
+
 ---
-
-
-
-
-
-
-
-
-

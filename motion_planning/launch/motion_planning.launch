@@ -1,0 +1,3 @@
+<launch>
+  <node name="motion_planning_node" pkg="motion_planning" type="motion_planning_node" output="screen" />
+</launch>
