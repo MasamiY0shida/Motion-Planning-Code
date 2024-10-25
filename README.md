@@ -1,6 +1,4 @@
-# Motion-Planning-Code
 # README.md
-
 # Motion Planning Code
 
 Welcome to the **Motion Planning Code** repository! This project implements a motion planning and robotics simulation for a robotic manipulator (specifically, the Panda robot). It allows you to simulate picking, placing, stacking, and unstacking actions with cubes on a 3x3 grid. The code is designed to help understand motion planning algorithms and test various scenarios in robotics.
@@ -41,10 +39,8 @@ Navigate to the `src` directory of your workspace and clone this repository:
 
 ```bash
 cd ~/catkin_ws/src
-git clone https://github.com/yourusername/motion_planning.git
+git clone https://github.com/MasamiY0shida/Motion-Planning-Code/motion_planning.git
 ```
-
-**Note**: Replace `yourusername` with your GitHub username or the appropriate repository URL.
 
 The directory structure should now look like this:
 
